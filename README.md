@@ -43,17 +43,57 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/001_mvp_schema.sql` in the SQL editor.
+2. Run migrations in the SQL editor **in this order**:
+
+| Order | File | Purpose |
+|-------|------|---------|
+| 1 | `001_mvp_schema.sql` | Core tables |
+| 2 | `003_filter_facets_rpc.sql` | Facet helpers + `get_filter_facets` |
+| 3 | `006_filter_facets_all_states.sql` | Full state list in facets (supersedes 004/005) |
+| 4 | `007_enterprise_search.sql` | FTS, bounded RPC params, tier totals |
+| 5 | `008_zip_code_search.sql` | ZIP table, `search_resources` with `p_zip` |
+
+Skip `002`, `004`, and `005` on greenfield deploys — they are superseded by `007`/`008` and `006`.
+
+`009_fix_search_resources_overload.sql` is a **no-op** (retired). Do **not** drop `search_resources` manually unless PostgREST reports an overload error; see comments in that file for recovery.
+
 3. Run `supabase/seed-categories.sql`.
-4. Import sample resources:
+4. Import resources (if starting fresh):
 
 ```bash
 npm run import:resources
-# or with a custom file:
-npx tsx scripts/import-resources-csv.ts data/sample-kentucky-resources.csv
 ```
 
-5. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `.env.local`.
+5. Seed US ZIP codes (required for ZIP search):
+
+```bash
+npm run seed:zip-codes
+```
+
+Requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
+
+6. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to `.env.local`.
+
+### Verify search deployment
+
+```bash
+npm run test:rpc          # Campbell county + ZIP 40202 smoke
+npm run test:facets       # Facet RPC
+npm run test:multi-state  # Cross-state count parity
+npm run test:smoke        # ZIP, Texas, pagination, unknown ZIP
+```
+
+### Scalable search (10k+ resources)
+
+- **`search_resources` RPC** (`008`) — county/ZIP/keyword search with true DB pagination, FTS, tier sorting, and tier totals.
+- **`get_filter_facets` RPC** (`006`) — cascading filter dropdowns computed in SQL.
+- If RPCs are missing, the app falls back to legacy in-memory paths (no ZIP, no FTS).
+
+### Upgrading an existing database
+
+If you already ran `002`–`006`, apply `007` then `008`, then `npm run seed:zip-codes`.
+
+If PostgREST reports `function name "search_resources" is not unique`, follow the manual recovery steps in `009_fix_search_resources_overload.sql`, then re-run the `CREATE OR REPLACE FUNCTION` block from `008`.
 
 ## Routes
 
@@ -64,6 +104,7 @@ npx tsx scripts/import-resources-csv.ts data/sample-kentucky-resources.csv
 | `/resources/[id]` | Program detail |
 | `/about`, `/privacy`, `/accessibility` | Static pages |
 | `/api/resources` | JSON API (same filters as search page) |
+| `/api/facets` | Cascading filter facet options |
 
 ## Seed data
 
@@ -100,6 +141,11 @@ scripts/         # CSV import + data generation
 | `npm run dev` | Start dev server |
 | `npm run build` | Production build |
 | `npm run import:resources` | Import CSV into Supabase |
+| `npm run seed:zip-codes` | Seed `zip_codes` table from npm `zipcodes` package |
+| `npm run test:rpc` | Smoke test `search_resources` RPC |
+| `npm run test:facets` | Smoke test `get_filter_facets` RPC |
+| `npm run test:multi-state` | Cross-state RPC vs legacy parity |
+| `npm run test:smoke` | End-to-end search smoke (ZIP, Texas, pagination) |
 
 ## Definition of done checklist
 

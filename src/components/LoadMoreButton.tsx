@@ -1,28 +1,42 @@
 "use client";
 
-import Link from "next/link";
+import { ButtonSpinner } from "@/components/ButtonSpinner";
 
 interface LoadMoreButtonProps {
   loadMoreLabel: string;
-  nextPage: number;
-  searchParams: Record<string, string | undefined>;
+  loadingLabel: string;
   hasMore: boolean;
+  isLoading: boolean;
+  onLoadMore: () => void;
 }
 
-export function LoadMoreButton({ loadMoreLabel, nextPage, searchParams, hasMore }: LoadMoreButtonProps) {
+export function LoadMoreButton({
+  loadMoreLabel,
+  loadingLabel,
+  hasMore,
+  isLoading,
+  onLoadMore,
+}: LoadMoreButtonProps) {
   if (!hasMore) return null;
-
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams)) {
-    if (value) params.set(key, value);
-  }
-  params.set("page", String(nextPage));
 
   return (
     <div className="flex justify-center pt-4">
-      <Link href={`/resources?${params.toString()}`} className="btn-secondary">
-        {loadMoreLabel}
-      </Link>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={onLoadMore}
+        disabled={isLoading}
+        aria-busy={isLoading}
+      >
+        {isLoading ? (
+          <>
+            <ButtonSpinner />
+            {loadingLabel}
+          </>
+        ) : (
+          loadMoreLabel
+        )}
+      </button>
     </div>
   );
 }

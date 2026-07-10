@@ -3,17 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:turbo": "NODE_ENV=development next dev --turbopack",
+    "dev:webpack": "node scripts/dev.mjs",
+    "prebuild": "node scripts/prebuild.mjs",
     "build": "next build",
     "start": "next start",
+    "clean": "rm -rf .next .next-dev",
+    "reset": "node scripts/reset-dev.mjs",
     "lint": "next lint",
-    "import:resources": "tsx scripts/import-resources-csv.ts"
+    "import:resources": "tsx scripts/import-resources-csv.ts",
+    "test:rpc": "tsx scripts/test-search-rpc.ts",
+    "test:facets": "tsx scripts/test-facets-rpc.ts",
+    "test:multi-state": "tsx scripts/test-multi-state-rpc.ts",
+    "test:smoke": "tsx scripts/test-search-smoke.ts",
+    "seed:zip-codes": "tsx scripts/seed-zip-codes.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "next": "^15.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "zipcodes": "^8.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

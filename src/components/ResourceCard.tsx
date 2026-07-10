@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { Resource } from "@/types";
 import type { Translator } from "@/i18n/translator";
-import { coverageBadgeKey } from "@/lib/resource-coverage";
-import { getLocalizedField } from "@/lib/data";
+import { getResourceCoverageTier } from "@/lib/resource-coverage";
+import { CoverageBadge } from "@/components/CoverageBadge";
+import { getLocalizedField } from "@/lib/localized-field";
 import type { Locale } from "@/i18n/types";
 
 interface ResourceCardProps {
@@ -10,31 +11,35 @@ interface ResourceCardProps {
   t: Translator["t"];
   locale: Locale;
   searchParams?: string;
+  selectedCounty?: string;
 }
 
-export function ResourceCard({ resource, t, locale, searchParams }: ResourceCardProps) {
+export function ResourceCard({
+  resource,
+  t,
+  locale,
+  searchParams,
+  selectedCounty,
+}: ResourceCardProps) {
   const description = getLocalizedField(locale, resource.description, resource.description_es);
-  const coverageKey = coverageBadgeKey(resource);
+  const tier = getResourceCoverageTier(resource, selectedCounty);
   const coverageLabels = {
     local: t("resources.coverageLocal"),
     regional: t("resources.coverageRegional"),
     statewide: t("resources.coverageStatewide"),
   } as const;
-  const coverageLabel = coverageLabels[coverageKey];
   const href = `/resources/${resource.id}${searchParams ? `?back=${encodeURIComponent(searchParams)}` : ""}`;
   const location = [resource.city, resource.county].filter(Boolean).join(", ");
 
+  const regionalNote =
+    tier === "regional" && resource.county && selectedCounty
+      ? t("resources.coverageOfficeIn", { county: resource.county })
+      : null;
+
   return (
     <article className="card flex flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">
-          <Link
-            href={href}
-            className="hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-          >
-            {resource.name}
-          </Link>
-        </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        <CoverageBadge tier={tier} label={coverageLabels[tier]} />
         {resource.category && (
           <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-sm font-medium text-slate-800">
             {resource.category.name}
@@ -42,23 +47,32 @@ export function ResourceCard({ resource, t, locale, searchParams }: ResourceCard
         )}
       </div>
 
+      <h2 className="text-lg font-semibold text-slate-900">
+        <Link
+          href={href}
+          className="hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+        >
+          {resource.name}
+        </Link>
+      </h2>
+
       {location && <p className="text-sm text-slate-600">{location}</p>}
+      {regionalNote && (
+        <p className="text-sm font-medium text-amber-900">{regionalNote}</p>
+      )}
 
       <p className="line-clamp-2 text-base text-slate-700">{description}</p>
 
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className="rounded-md border border-brand-200 bg-brand-50 px-2 py-1 font-medium text-brand-800">
-          {coverageLabel}
-        </span>
-        {resource.phone && (
+      {resource.phone && (
+        <p className="text-sm">
           <a
             href={`tel:${resource.phone.replace(/[^\d+]/g, "")}`}
             className="text-brand-700 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
           >
             {resource.phone}
           </a>
-        )}
-      </div>
+        </p>
+      )}
 
       <Link href={href} className="btn-secondary mt-auto w-fit">
         {t("resources.viewDetails")}
