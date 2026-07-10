@@ -21,6 +21,7 @@ export interface Resource {
   county: string | null;
   city: string | null;
   address: string | null;
+  zip_code?: string | null;
   phone: string | null;
   email: string | null;
   website: string | null;
@@ -40,6 +41,7 @@ export interface Resource {
 
 export interface ResourceFilters {
   q?: string;
+  zip?: string;
   state?: string;
   county?: string;
   city?: string;
@@ -48,16 +50,70 @@ export interface ResourceFilters {
   sort?: "name" | "newest";
 }
 
+export interface ResolvedZipLocation {
+  zip: string;
+  state: string;
+  county?: string | null;
+  city: string;
+}
+
 export interface ResourceQueryResult {
   resources: Resource[];
   total: number;
   page: number;
   pageSize: number;
   totalPages: number;
+  /** Full tier totals for county or ZIP searches (before pagination). */
+  tierTotals?: CoverageTierCounts;
+  resolvedLocation?: ResolvedZipLocation;
+  zipNotFound?: boolean;
 }
 
 export interface LocationFacets {
   states: string[];
   counties: string[];
   cities: string[];
+}
+
+export interface FilterFacetSelection {
+  state?: string;
+  county?: string;
+  city?: string;
+  category?: string;
+}
+
+/** City option for filter dropdowns; regional providers note their home county. */
+export interface CityFacetOption {
+  city: string;
+  /** Primary office county when different from the selected filter county. */
+  locatedInCounty: string | null;
+  isLocal: boolean;
+}
+
+export interface CoverageTierCounts {
+  local: number;
+  regional: number;
+  statewide: number;
+}
+
+export interface CountyFacetOption {
+  county: string;
+  /** Present when a state filter is selected. */
+  counts?: CoverageTierCounts;
+}
+
+export interface CategoryFacetOption {
+  id: string;
+  name: string;
+  slug: string;
+  sort_order: number;
+  /** Present when state and county filters are both selected. */
+  counts?: CoverageTierCounts;
+}
+
+export interface FilterFacets {
+  states: string[];
+  counties: CountyFacetOption[];
+  cities: CityFacetOption[];
+  categories: CategoryFacetOption[];
 }

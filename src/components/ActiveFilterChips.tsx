@@ -7,6 +7,7 @@ interface ActiveFilterChipsProps {
     activeFilters: string;
     clearAll: string;
     keyword: string;
+    zip: string;
     state: string;
     county: string;
     city: string;
@@ -18,6 +19,7 @@ interface ActiveFilterChipsProps {
 
 const LABEL_KEYS: Record<string, keyof ActiveFilterChipsProps["labels"]> = {
   q: "keyword",
+  zip: "zip",
   state: "state",
   county: "county",
   city: "city",

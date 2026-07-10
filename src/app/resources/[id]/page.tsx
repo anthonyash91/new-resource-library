@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getResourceById, getLocalizedField } from "@/lib/data";
+import { getResourceById } from "@/lib/data";
+import { getLocalizedField } from "@/lib/localized-field";
 import { getLocale } from "@/i18n/locale";
 import { createTranslator } from "@/i18n/translator";
-import { coverageBadgeKey, formatServedCounties, shouldShowCountiesServed } from "@/lib/resource-coverage";
+import { getResourceCoverageTier, formatServedCounties, shouldShowCountiesServed } from "@/lib/resource-coverage";
+import { CoverageBadge } from "@/components/CoverageBadge";
 
 interface ResourceDetailPageProps {
   params: Promise<{ id: string }>;
@@ -31,10 +33,13 @@ export default async function ResourceDetailPage({ params, searchParams }: Resou
   const locale = await getLocale();
   const { t } = createTranslator(locale);
 
+  const backParams = new URLSearchParams(backQs);
+  const selectedCounty = backParams.get("county") ?? undefined;
+
   const description = getLocalizedField(locale, resource.description, resource.description_es);
   const eligibility = getLocalizedField(locale, resource.eligibility, resource.eligibility_es);
   const notes = getLocalizedField(locale, resource.notes, resource.notes_es);
-  const coverageKey = coverageBadgeKey(resource);
+  const coverageTier = getResourceCoverageTier(resource, selectedCounty);
   const coverageLabels = {
     local: t("resources.coverageLocal"),
     regional: t("resources.coverageRegional"),
@@ -58,9 +63,7 @@ export default async function ResourceDetailPage({ params, searchParams }: Resou
               {resource.category.name}
             </span>
           )}
-          <span className="rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-sm font-medium text-brand-800">
-            {coverageLabels[coverageKey]}
-          </span>
+          <CoverageBadge tier={coverageTier} label={coverageLabels[coverageTier]} />
         </div>
         <h1 className="text-3xl font-bold text-slate-900">{resource.name}</h1>
         {location && <p className="text-lg text-slate-600">{location}</p>}
