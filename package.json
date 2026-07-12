@@ -13,6 +13,7 @@
     "reset": "node scripts/reset-dev.mjs",
     "lint": "next lint",
     "import:resources": "tsx scripts/import-resources-csv.ts",
+    "dedupe:resources": "tsx scripts/dedupe-resources.ts",
     "test:rpc": "tsx scripts/test-search-rpc.ts",
     "test:facets": "tsx scripts/test-facets-rpc.ts",
     "test:multi-state": "tsx scripts/test-multi-state-rpc.ts",
