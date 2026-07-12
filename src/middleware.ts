@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { clientIpFromHeaders, rateLimit } from "@/lib/rate-limit";
+import { clientIpFromRequest, rateLimit } from "@/lib/rate-limit";
 
 const API_RATE_LIMIT = { limit: 120, windowMs: 60_000 };
 
-export function middleware(request: NextRequest) {
-  const ip = clientIpFromHeaders(request.headers.get("x-forwarded-for"));
+export async function middleware(request: NextRequest) {
+  const ip = clientIpFromRequest(request.headers);
   const bucketKey = `${ip}:${request.nextUrl.pathname}`;
-  const result = rateLimit(bucketKey, API_RATE_LIMIT);
+  const result = await rateLimit(bucketKey, API_RATE_LIMIT);
 
   if (!result.success) {
     const retryAfter = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));

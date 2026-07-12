@@ -52,6 +52,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 | 3 | `006_filter_facets_all_states.sql` | Full state list in facets (supersedes 004/005) |
 | 4 | `007_enterprise_search.sql` | FTS, bounded RPC params, tier totals |
 | 5 | `008_zip_code_search.sql` | ZIP table, `search_resources` with `p_zip` |
+| 6 | `010_search_resources_public_json.sql` | Allowlisted resource JSON (no `search_vector`) |
 
 Skip `002`, `004`, and `005` on greenfield deploys — they are superseded by `007`/`008` and `006`.
 
@@ -85,15 +86,14 @@ npm run test:smoke        # ZIP, Texas, pagination, unknown ZIP
 
 ### Scalable search (10k+ resources)
 
-- **`search_resources` RPC** (`008`) — county/ZIP/keyword search with true DB pagination, FTS, tier sorting, and tier totals.
+- **`search_resources` RPC** (`008` + `010`) — county/ZIP/keyword search with true DB pagination, FTS, tier sorting, tier totals, and allowlisted JSON.
 - **`get_filter_facets` RPC** (`006`) — cascading filter dropdowns computed in SQL.
-- If RPCs are missing, the app falls back to legacy in-memory paths (no ZIP, no FTS).
+- **Production fail-closed:** when `NODE_ENV=production` (or `SEARCH_REQUIRE_RPC=true`), missing RPCs return errors instead of loading the full catalog into Node.
+- **API rate limits:** middleware limits `/api/*` (120/min/IP). Set `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` for shared limits across Vercel instances.
 
 ### Upgrading an existing database
 
-If you already ran `002`–`006`, apply `007` then `008`, then `npm run seed:zip-codes`.
-
-If PostgREST reports `function name "search_resources" is not unique`, follow the manual recovery steps in `009_fix_search_resources_overload.sql`, then re-run the `CREATE OR REPLACE FUNCTION` block from `008`.
+If you already ran `002`–`008`, apply `010_search_resources_public_json.sql`, then optionally configure Upstash for production rate limiting.
 
 ## Routes
 

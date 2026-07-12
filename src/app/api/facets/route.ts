@@ -17,10 +17,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const facets = await getFilterFacets(parsed.data);
-  return NextResponse.json(facets, {
-    headers: {
-      "Cache-Control": FACET_CACHE_CONTROL,
-    },
-  });
+  try {
+    const facets = await getFilterFacets(parsed.data);
+    return NextResponse.json(facets, {
+      headers: {
+        "Cache-Control": FACET_CACHE_CONTROL,
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Filter options are temporarily unavailable." },
+      { status: 503 }
+    );
+  }
 }
