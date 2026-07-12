@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { createClient } from "@supabase/supabase-js";
+import { resourceDedupeKey } from "../src/lib/resource-dedupe";
 
 function loadEnvFile(filePath: string) {
   if (!existsSync(filePath)) return;
@@ -129,6 +130,51 @@ function resolveCategoryId(catBySlug: Map<string, string>, slug: string): string
   return catBySlug.get(slug) ?? catBySlug.get(CATEGORY_ALIASES[slug] ?? "");
 }
 
+type ImportRow = {
+  name: string;
+  description: string;
+  category_id: string;
+  state: string;
+  county: string | null;
+  city: string | null;
+  address: string | null;
+  phone: string | null;
+  website: string | null;
+  hours: string | null;
+  eligibility: string | null;
+  notes: string | null;
+  served_counties: string[];
+  coverage: string;
+  services: string[];
+  tags: string[];
+  status: "active";
+};
+
+async function loadExistingDedupeKeys(): Promise<Set<string>> {
+  const keys = new Set<string>();
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("resources")
+      .select("name, state, city, address, phone")
+      .eq("status", "active")
+      .range(from, from + 999);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    for (const row of data) {
+      keys.add(resourceDedupeKey(row));
+    }
+
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+
+  return keys;
+}
+
 async function main() {
   await ensureCategories();
 
@@ -145,8 +191,14 @@ async function main() {
 
   const catBySlug = new Map(categories.map((c) => [c.slug, c.id]));
   const rows = parseCsv(readFileSync(csvPath, "utf-8"));
+  const existingKeys = await loadExistingDedupeKeys();
 
-  const payload = rows.map((row) => {
+  const payload: ImportRow[] = [];
+  let skippedExisting = 0;
+  let skippedInFile = 0;
+  const seenInFile = new Set<string>();
+
+  for (const row of rows) {
     const categoryId = resolveCategoryId(catBySlug, row.category);
     if (!categoryId) {
       throw new Error(`Unknown category slug: ${row.category}`);
@@ -155,7 +207,7 @@ async function main() {
       ? row.served_counties.split("|").map((s) => s.trim()).filter(Boolean)
       : [];
 
-    return {
+    const candidate: ImportRow = {
       name: row.name,
       description: row.description,
       category_id: categoryId,
@@ -174,12 +226,45 @@ async function main() {
       tags: [],
       status: "active",
     };
-  });
 
-  const { error } = await supabase.from("resources").insert(payload);
-  if (error) throw error;
+    const key = resourceDedupeKey(candidate);
+    if (seenInFile.has(key)) {
+      skippedInFile += 1;
+      continue;
+    }
+    seenInFile.add(key);
 
-  console.log(`Imported ${payload.length} resources from ${csvPath}`);
+    if (existingKeys.has(key)) {
+      skippedExisting += 1;
+      continue;
+    }
+
+    existingKeys.add(key);
+    payload.push(candidate);
+  }
+
+  if (!payload.length) {
+    console.log(
+      `No new resources to import from ${csvPath} ` +
+        `(skipped existing: ${skippedExisting}, skipped in-file dupes: ${skippedInFile}).`
+    );
+    return;
+  }
+
+  const batchSize = 200;
+  let inserted = 0;
+  for (let i = 0; i < payload.length; i += batchSize) {
+    const batch = payload.slice(i, i + batchSize);
+    const { error } = await supabase.from("resources").insert(batch);
+    if (error) throw error;
+    inserted += batch.length;
+    console.log(`Inserted ${inserted} / ${payload.length}`);
+  }
+
+  console.log(
+    `Imported ${inserted} resources from ${csvPath} ` +
+      `(skipped existing: ${skippedExisting}, skipped in-file dupes: ${skippedInFile}).`
+  );
 }
 
 main().catch((err) => {

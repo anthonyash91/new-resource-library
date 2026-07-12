@@ -53,6 +53,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 | 4 | `007_enterprise_search.sql` | FTS, bounded RPC params, tier totals |
 | 5 | `008_zip_code_search.sql` | ZIP table, `search_resources` with `p_zip` |
 | 6 | `010_search_resources_public_json.sql` | Allowlisted resource JSON (no `search_vector`) |
+| 7 | `011_resources_active_dedupe.sql` | Unique fingerprint on active resources |
 
 Skip `002`, `004`, and `005` on greenfield deploys — they are superseded by `007`/`008` and `006`.
 
@@ -64,6 +65,17 @@ Skip `002`, `004`, and `005` on greenfield deploys — they are superseded by `0
 ```bash
 npm run import:resources
 ```
+
+`import:resources` skips rows that already match an active resource fingerprint (name + state + city + address + phone).
+
+If you re-imported CSVs before dedupe existed, clean duplicates first:
+
+```bash
+npm run dedupe:resources          # dry-run report
+npm run dedupe:resources -- --apply   # archive extras (keeps oldest)
+```
+
+Then run `011_resources_active_dedupe.sql` so Postgres rejects future active duplicates.
 
 5. Seed US ZIP codes (required for ZIP search):
 
@@ -140,7 +152,8 @@ scripts/         # CSV import + data generation
 |---------|-------------|
 | `npm run dev` | Start dev server |
 | `npm run build` | Production build |
-| `npm run import:resources` | Import CSV into Supabase |
+| `npm run import:resources` | Import CSV into Supabase (skips existing fingerprints) |
+| `npm run dedupe:resources` | Report / archive duplicate active resources |
 | `npm run seed:zip-codes` | Seed `zip_codes` table from npm `zipcodes` package |
 | `npm run test:rpc` | Smoke test `search_resources` RPC |
 | `npm run test:facets` | Smoke test `get_filter_facets` RPC |
