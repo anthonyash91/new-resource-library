@@ -12,6 +12,8 @@ import type {
 import { resourceServesCounty, coverageTierSortOrder, countResourcesByCoverageTier, resourceMatchesZipSearch } from "@/lib/resource-coverage";
 import { computeFilterFacets } from "@/lib/filter-facets";
 import { createSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
+import { toPublicResource, toPublicResources } from "@/lib/public-resource";
+import { SearchRpcUnavailableError, shouldRequireSearchRpc } from "@/lib/search-config";
 import { PAGE_SIZE, escapeIlikePattern, resourceFiltersSchema } from "@/lib/validation";
 import { fullStateNameFromAbbr } from "@/lib/zip-code";
 import zipcodes from "zipcodes";
@@ -299,7 +301,7 @@ async function mapRpcSearchResult(
   }
 ): Promise<ResourceQueryResult> {
   const categories = await getCategories();
-  const resources = attachCategories(payload.resources ?? [], categories);
+  const resources = attachCategories(toPublicResources(payload.resources), categories);
   const total = Number(payload.total ?? 0);
   const tierTotals = parseRpcTierTotals(payload.tier_totals);
   const resolvedLocation = parseResolvedLocation(payload.resolved_location);
@@ -370,8 +372,9 @@ async function querySupabaseLegacy(
     items = items.filter((r) => resourceServesCounty(r, parsed.county!));
     items = sortResources(items, parsed.sort, parsed.county);
     const categories = await getCategories();
-    const result = paginateResourcePage(items, parsed.page);
-    const withTotals = withCountyTierTotals(items, parsed.county, result);
+    const publicItems = toPublicResources(items);
+    const result = paginateResourcePage(publicItems, parsed.page);
+    const withTotals = withCountyTierTotals(publicItems, parsed.county, result);
     return { ...withTotals, resources: attachCategories(withTotals.resources, categories) };
   }
 
@@ -401,7 +404,7 @@ async function querySupabaseLegacy(
   const { data, count, error } = await query;
   if (error) throw error;
 
-  const resources = (data ?? []) as Resource[];
+  const resources = toPublicResources((data ?? []) as Resource[]);
 
   return {
     resources,
@@ -417,6 +420,12 @@ async function querySupabase(filters: ResourceFilters): Promise<ResourceQueryRes
 
   const rpcResult = await querySupabaseViaRpc(parsed);
   if (rpcResult) return rpcResult;
+
+  if (shouldRequireSearchRpc()) {
+    throw new SearchRpcUnavailableError(
+      "search_resources RPC is required in production. Run supabase/migrations/007–010."
+    );
+  }
 
   return querySupabaseLegacy(parsed);
 }
@@ -460,7 +469,8 @@ export async function getResourceById(id: string): Promise<Resource | null> {
     .maybeSingle();
 
   if (error) throw error;
-  return (data as Resource | null) ?? null;
+  if (!data) return null;
+  return toPublicResource(data as Resource);
 }
 
 const FACET_PAGE_SIZE = DB_PAGE_SIZE;
@@ -556,6 +566,9 @@ async function enrichFacetTierCounts(
 
   if (!needsCountyCounts && !needsCategoryCounts) return normalized;
 
+  // Never pull the full catalog into Node when RPCs are required (production).
+  if (shouldRequireSearchRpc()) return normalized;
+
   const [resources, categories] = await Promise.all([
     getActiveResourceFacetRows(),
     getCategories(),
@@ -584,6 +597,7 @@ async function getFilterFacetsLegacy(
 /** Older RPC versions narrowed the state list to the current selection. */
 async function ensureCompleteStateList(facets: FilterFacets): Promise<FilterFacets> {
   if (facets.states.length > 1) return facets;
+  if (shouldRequireSearchRpc()) return facets;
 
   const rows = await getActiveResourceFacetRows();
   const allStates = [
@@ -615,8 +629,19 @@ async function fetchFilterFacetsInternal(
       const enriched = await enrichFacetTierCounts(rpcResult, filters);
       return ensureCompleteStateList(enriched);
     }
-  } catch {
-    // RPC failed — use legacy path
+  } catch (error) {
+    if (shouldRequireSearchRpc()) {
+      if (error instanceof SearchRpcUnavailableError) throw error;
+      throw new SearchRpcUnavailableError(
+        "get_filter_facets RPC failed. Run supabase/migrations/003 and 006."
+      );
+    }
+  }
+
+  if (shouldRequireSearchRpc()) {
+    throw new SearchRpcUnavailableError(
+      "get_filter_facets RPC is required in production. Run supabase/migrations/003 and 006."
+    );
   }
 
   return ensureCompleteStateList(await getFilterFacetsLegacy(filters));
